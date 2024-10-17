@@ -1,0 +1,450 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}PDF Documents{% endblock %}
+{% block styles %}
+<style>
+    :root {
+        --primary-color: #5738FB;
+        --secondary-color: #556578;
+    }
+    body {
+        background-color: #f8f9fa;
+    }
+    .container-fluid {
+    padding-top: 90px;
+    width: 1200px;
+    max-width: 1500px;
+    margin: 0 auto;
+    }
+    .card {
+        border: none;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+    .table th {
+        background-color: #f1f3f5;
+        font-weight: 600;
+    }
+    .pdf-icon {
+        width: 2rem;
+        height: 2rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #e9ecef;
+        border-radius: 0.25rem;
+        margin-right: 0.3rem;
+    }
+    .table-hover tbody tr:hover {
+        background-color: rgba(87, 56, 251, 0.1);
+    }
+    .dropdown-menu {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+    .btn-primary {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+    }
+    .btn-primary:hover {
+        background-color: #4528e0;
+        border-color: #4528e0;
+    }
+    .btn-outline-secondary {
+        color: var(--secondary-color);
+        border-color: var(--secondary-color);
+    }
+    .btn-outline-secondary:hover {
+        background-color: var(--secondary-color);
+        color: white;
+    }
+    .page-link {
+        color: var(--primary-color);
+    }
+    .page-item.active .page-link {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+    }
+    .form-check-input:checked {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+    }
+    .upload-btn {
+        cursor: pointer;
+        display: inline-block;
+        background-color: #5738FB;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 0.25rem;
+        text-align: center;
+        font-weight: 600;
+        white-space: nowrap;
+        border: 1px solid transparent;
+        transition: background-color 0.3s;
+        margin-right: 1rem;
+    }
+    .upload-btn:hover {
+        background-color: #0056b3;
+    }
+    .upload-input {
+        display: none;
+    }
+    .modal-body {
+        text-align: center;
+    }
+    .pdf-preview {
+        width: 100%;
+        height: 500px;
+        border: none;
+    }
+    #loader {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 999;
+    }
+    .not-for-chat_for_later_use{
+        background-color: #f6ddbd;
+    }
+    .in_processing{
+        color: #dc5057;        
+        padding-left: 50px;
+        padding-right: 5px;
+        text-align: end;
+    }
+    #loader_small{
+        width: 5%;
+       
+        background-color: #f6c9a4;
+    }
+</style>
+{% endblock %}
+{% block content %}
+{% include 'navbar.html' %}
+<div class="container-fluid">
+    {% if messages %}
+    {% for message in messages %}
+        {% if message.tags == 'error' %}
+            <div id="errorMessage" class="alert alert-danger" role="alert">
+                {{ message }}
+            </div>
+        {% elif 'pdf_delete' in message.tags %}
+            <div id="successMessage" class="alert alert-primary alert-{{ message.tags }}" role="alert">
+                {{ message }}
+            </div>
+        {% endif %}
+    {% endfor %}
+    {% endif %}
+
+    <!-- Loader -->
+    <div id="loader">
+        <img src="{% static 'fetch_ai_loader.gif' %}" alt="Loading..." />
+    </div>
+    
+
+    <div class="card">
+        <div class="card-body">
+            <div id="noPdfSelected" class="alert alert-danger" role="alert" style="display: none;">
+                Please select at least one PDF to start a chat.
+            </div>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="card-title mb-0">PDF Documents</h2>
+                <div class="d-flex">
+                    <a href="#" class="btn btn-primary me-2 start-chat-button">
+                        <i class="fas fa-comments me-2"></i>Start Chat
+                    </a>
+                    <label for="pdf-upload" class="upload-btn">
+                        <i class="fas fa-upload me-2"></i>Upload PDF
+                    </label>
+                    <!-- Hidden file input and form -->
+                    <form method="post" enctype="multipart/form-data" id="uploadForm" action="{% url 'pdf-upload' %}">
+                        {% csrf_token %}
+                        <input type="file" id="pdf-upload" name="file" accept=".pdf" multiple class="upload-input">
+                        <button type="submit" class="btn btn-primary" style="display: none;">
+                            <i class="fas fa-upload me-2"></i>Upload
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <form method="get" action="{% url 'pdf-list' %}">
+                            <input type="text" class="form-control" name="search" value="{{ search_query }}" placeholder="Search PDFs...">
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th scope="col" width="50px">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="" id="selectAll">
+                                </div>
+                            </th>
+                            <th scope="col">PDF Name</th>
+                            <th scope="col">Date Added</th>
+                            <th scope="col" width="120px">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pdf in pdf_files %}
+                        <tr {% if pdf.in_processing %} class='not-for-chat' {% endif %}>
+                            <td>
+                                <div class="form-check">
+                                    <input class="form-check-input"  data-in-processing="{{ pdf.in_processing }}" {% if  pdf.in_processing %} disabled {% endif %} type="checkbox" value="" in-processing-id="{{ pdf.pk }}"   id="pdf_{{ pdf.pk }}">
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="pdf-icon"><i class="far fa-file-pdf text-danger"></i></span>
+                                      {{ pdf.file_name }} 
+                                      
+                                        {% if  pdf.in_processing %} 
+                                        <div class="div_in_processing_{{ pdf.pk }}">
+                                                    <span class="in_processing"><b> In Processing  </b> </span>
+                                                    <img id="loader_small" src="{% static 'fetch_ai_loader.gif' %}" alt="Loading..." />
+                                        
+                                        </div>
+                                        {% endif %}
+                                </div>
+                            </td>
+                            
+                            <td>
+                                {{ pdf.created_at|date:"Y-m-d" }}</td>
+                            <td>
+                                <a href="{{ pdf.file.url }}" class="btn btn-sm btn-outline-secondary" download>
+                                    <i class="fas fa-download"></i>
+                                </a>
+                                <form method="post" action="{% url 'pdf-delete' pdf.pk %}" style="display: inline;">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5"style="text-align: center;">No PDF files uploaded.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <nav aria-label="Page navigation" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?search={{ search_query }}&page=1" aria-label="Previous">
+                            <span aria-hidden="true">&laquo;&laquo;</span>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?search={{ search_query }}&page={{ page_obj.previous_page_number }}" aria-label="Previous">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% for num in page_obj.paginator.page_range %}
+                        {% if page_obj.number == num %}
+                            <li class="page-item active" aria-current="page">
+                                <span class="page-link">{{ num }}</span>
+                            </li>
+                        {% else %}
+                            <li class="page-item">
+                                <a class="page-link" href="?search={{ search_query }}&page={{ num }}">{{ num }}</a>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?search={{ search_query }}&page={{ page_obj.next_page_number }}" aria-label="Next">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?search={{ search_query }}&page={{ page_obj.paginator.num_pages }}" aria-label="Next">
+                            <span aria-hidden="true">&raquo;&raquo;</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+<meta name="csrf-token" content="{{ csrf_token }}">
+
+{% endblock %}
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const showMessage = (elementId) => {
+            const messageElement = document.getElementById(elementId);
+            if (messageElement) {
+                messageElement.style.display = 'block';
+                setTimeout(() => {
+                    messageElement.style.display = 'none';
+                }, 2000);
+            }
+        };
+
+        showMessage('successMessage');
+        showMessage('errorMessage');
+
+        const pdfUploadInput = document.getElementById('pdf-upload');
+        const uploadForm = document.getElementById('uploadForm');
+        const loader = document.getElementById('loader');
+
+        pdfUploadInput.addEventListener('change', function() {
+            loader.style.display = 'block';
+            uploadForm.submit();
+        });
+
+        uploadForm.addEventListener('submit', function() {
+            loader.style.display = 'block';
+        });
+
+        document.getElementById('selectAll').addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('tbody .form-check-input');
+            checkboxes.forEach(checkbox =>{ 
+                const isInProcessing = checkbox.getAttribute('data-in-processing') === 'True'; 
+                if(!isInProcessing)checkbox.checked = this.checked              
+
+            });
+        });
+
+        // document.getElementsByClassName('selectAll').addEventListener('change', function() {
+        //     const checkboxes = document.querySelectorAll('tbody .form-check-input');
+        //     checkboxes.forEach(checkbox =>{ 
+        //         const isInProcessing = checkbox.getAttribute('data-in-processing') === 'False'; 
+        //         if(isInProcessing)checkbox.checked = this.checked              
+
+        //     });
+        // });
+   
+
+
+        const startChatButton = document.getElementsByClassName('start-chat-button')[0];
+        startChatButton.addEventListener('click', function () {
+            const selectedCheckboxes = document.querySelectorAll('tbody .form-check-input:checked');
+
+            if (selectedCheckboxes.length === 0) {
+                const noPdfSelectedElement = document.getElementById('noPdfSelected');
+                noPdfSelectedElement.style.display = 'block';
+                setTimeout(() => {
+                    noPdfSelectedElement.style.display = 'none';
+                }, 2000);
+            } else {
+            
+                const pdfIds = Array.from(selectedCheckboxes).map(checkbox => checkbox.id.replace('pdf', ''));
+                window.location.href = `/chat?pdf_ids=${pdfIds.join(',')}`;
+            }
+        });
+    });
+</script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {       
+       // setInterval(makeAjaxRequest, 20000); 
+        setInterval(makePostAjaxRequest, 20000); 
+    });
+    
+                function makeAjaxRequest() {
+                // Perform the AJAX request to the correct URL
+                fetch("{% url 'pdf-chunk' %}")  // Make sure 'pdf_chunk' matches the URL name
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    // Handle the response data here
+                })
+                .catch(error => console.error('Error:', error));
+            }
+
+            function getCsrfToken() {
+                    // Get the CSRF token from the cookies
+                    let csrfToken = document.cookie.split('; ').find(row => row.startsWith('csrftoken')).split('=')[1];
+                    return csrfToken;
+                }
+
+            function makePostAjaxRequest() {
+                // Prepare the data you want to send in the POST request
+                
+                const checkboxes = document.querySelectorAll('tbody .form-check-input');
+                var ids = Array();
+                    checkboxes.forEach(checkbox =>{ 
+                const isInProcessing = checkbox.getAttribute('data-in-processing') === 'True'; 
+                if(isInProcessing) ids.push(checkbox.getAttribute('in-processing-id'));             
+
+            }); 
+
+           console.log("data",ids);
+            if(ids.length<1)return;     
+            const data = {
+                    message: "chunking in-processing status report",
+                    ids:ids                 
+                };
+
+                fetch("{% url 'pdf-chunk-status' %}", {  // URL for the view
+                    method: 'POST',  // Specify POST method
+                    headers: {
+                        'Content-Type': 'application/json',  // Sending JSON data
+                        'X-CSRFToken': getCsrfToken()  // Include CSRF token in the headers
+                    },
+                    body: JSON.stringify(data)  // Convert the data to a JSON string
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();  // Parse the response JSON
+                })
+                .then(data => {  
+                    console.log(data);  
+                    if(data.processing_done.length<1)return;
+                    console.log(data.processing_done);
+                    console.log(data.processing_done[0].ID);
+                    const checkboxes = document.querySelectorAll('tbody .form-check-input');
+                    checkboxes.forEach(checkbox => {
+                            const targetId = checkbox.getAttribute('in-processing-id'); 
+                            if(data.processing_done.find(item => item.ID == targetId)) {  
+                                checkbox.setAttribute('data-in-processing', 'False');
+                                checkbox.removeAttribute('disabled'); 
+                                const div = document.querySelector('.div_in_processing_'+targetId); // Replace with your class name
+                                if (div) div.remove(); 
+                                console.log('Found item:', targetId);
+                            } else {
+                                        console.log('ID not found', targetId);
+                                    }
+                        });
+
+
+            //         data.processing_done.forEach(item => {
+            //             checkboxes.forEach(checkbox =>{
+
+                            
+            //     const isInProcessing_done = checkbox.getAttribute('in-processing-id'); 
+            //     if(isInProcessing) ids.push(checkbox.getAttribute('in-processing-id'));  
+                
+            //     const isInProcessing = checkbox.getAttribute('data-in-processing') === 'True'; 
+            //     if(isInProcessing) ids.push(checkbox.getAttribute('in-processing-id'));  
+
+            // }); 
+            //             console.log(item.ID);
+            //         });
+
+                   // alert(data.processing_done);
+                    // Handle the response data here
+                })
+                .catch(error => console.error('Error:', error));
+            }
+
+    </script>
+    
+{% endblock %}
